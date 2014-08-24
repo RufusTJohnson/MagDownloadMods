@@ -1,0 +1,4 @@
+MagDownloadMods
+===============
+
+Magento Downloader Modifications
