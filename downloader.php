@@ -1,4 +1,29 @@
 <?php
+function debugPrintCallingFunction () { 
+    $file = 'n/a'; 
+    $func = 'n/a'; 
+    $line = 'n/a'; 
+    $debugTrace = debug_backtrace(); 
+    if (isset($debugTrace[2])) { 
+        $file = $debugTrace[2]['file'] ? $debugTrace[2]['file'] : 'n/a'; 
+        $line = $debugTrace[1]['line'] ? $debugTrace[1]['line'] : 'n/a'; 
+        //$line = $debugTrace[2]['line']." ".$debugTrace[1]['line']." ".$debugTrace[0]['line']." "; 
+    } 
+    if (isset($debugTrace[2])) $func = $debugTrace[2]['function'] ? $debugTrace[2]['function'] : 'n/a'; 
+    return"$file, $func, $line"; 
+} 
+
+
+function ssm_log($txt) 
+{
+  error_log($txt,3,"log.txt");
+  $shit = debugPrintCallingFunction();
+  error_log($shit,3,"log.txt");
+  error_log("\n\n",3,"log.txt");
+
+}
+ 
+ 
 class Magento_Downloader_Validator
 {
     /**
@@ -380,6 +405,7 @@ class Magento_Downloader_Worker
     public function downloadFile($fileName)
     {
         $dstFileName = tempnam(dirname($this->getDestinationFilePath($fileName)), 'download');
+		  ssm_log("dstFileName ".$dstFileName." SSM\n");
         $fp = fopen($dstFileName, 'wb');
         if (!$fp) {
             throw new Exception('Can\'t open file ' . $this->getDestinationFilePath($fileName));
@@ -445,8 +471,12 @@ class Magento_Downloader_Worker
         $downloadFile ='releases.xml';
         $filePath = self::CHANNEL_NAME . '/' . $downloadPackage . '/' . $downloadFile;
         $dstFileName = tempnam(dirname($this->getDestinationFilePath($downloadFile)), 'download');
+		  ssm_log("dstFileName ".$dstFileName." SSM\n");
+		  ssm_log("ftpHost ".$ftpHost." SSM\n");
 
         $connId = @ftp_connect($ftpHost);
+		  ssm_log($connId ? "Connected\n" : "Unable to Connect\n");
+
         if ($connId) {
             if (!@ftp_login($connId, $ftpUser, $ftpPass)) {
                 throw new Exception("Could not connect as $ftpUser on $ftpHost\\n");
@@ -454,26 +484,32 @@ class Magento_Downloader_Worker
             @ftp_pasv($connId, true);
             $fp = fopen($dstFileName, 'wb');
             if (!$fp) {
-                throw new Exception('Can\'t open file ' . $this->getDestinationFilePath());
+                ;throw new Exception('Can\'t open file ' . $this->getDestinationFilePath());
+                throw new Exception('Can\'t open file ' . dstFileName);
             }
             @ftp_pasv($connId, true);
-
             if (!@ftp_fget($connId, $fp, $filePath, FTP_BINARY, 0)) {
                 throw new Exception("Could not download MCM from $ftpHost");
             }
             fclose($fp);
 
             $releases = simplexml_load_file($dstFileName);
+
+
+			  	//ssm_log($releases. " SSM\n");
+			
+				
             unlink($dstFileName);
 
             $version = $this->getStabilityRelease($releases);
+				ssm_log("$version \n");
             if(empty($version)) {
                 throw new Exception("Could not download MCM for specified stability");
             }
 
             $downloadFile = sprintf('%s-%s.tgz', $downloadPackage, $version);
             $file = self::CHANNEL_NAME . '/' . $downloadPackage . '/' . $version . '/' . $downloadFile;
-
+				ssm_log($this->getDestinationFilePath() . " \n");
             $fp = fopen($this->getDestinationFilePath(), 'wb');
             if (!$fp) {
                 throw new Exception('Can\'t open file ' . $this->getDestinationFilePath());
@@ -483,7 +519,10 @@ class Magento_Downloader_Worker
             }
             ftp_close($connId);
             fclose($fp);
+			  	ssm_log("MOO \n");
+
         } else {
+			  	ssm_log("F \n");
             throw new Exception("Could not connect to $ftpHost");
         }
         
@@ -519,19 +558,36 @@ class Magento_Downloader_Worker
         $targetPath = '';
         if (!$this->isCurrentFolderWritable()||$forceTmp) {
             $targetPath = realpath(dirname($this->getDestinationFilePath()))
-                . DIRECTORY_SEPARATOR . 'magento' . DIRECTORY_SEPARATOR;
-            @mkdir(realpath(dirname($this->getDestinationFilePath())) . DIRECTORY_SEPARATOR . 'magento', 0777, true);
+                . DIRECTORY_SEPARATOR . 'magento' . DIRECTORY_SEPARATOR; 
+            $old = umask(0); 
+				$shit = realpath(dirname($this->getDestinationFilePath())) . DIRECTORY_SEPARATOR . 'magento';
+				@mkdir($shit, 0777, true);
+				$file_msg = $shit.(file_exists($shit) ? " exists" : " does not exist");
+				ssm_log("$file_msg \n");
+				//@mkdir("/home2/sammela/tmp/magento/moo", 0777,true);
+				//@mkdir("/home2/sammela/tmp/magento/moo/moo", 0777,true);
+            umask($old); 
         }
-
+		  ssm_log("TargetPath= $targetPath \n");
+		  ssm_log(realpath(dirname($this->getDestinationFilePath())) . DIRECTORY_SEPARATOR . 'magento'."\n");
         while (!feof($pointer)) {
             $header = $this->_parseTarHeader($pointer);
             if ($header !== false) {
-                $currentFile = $header['name'];
+                $currentFile = trim($header['name']);
                 if ($header['type']=='5') {
-                    @mkdir($targetPath . $currentFile, 0777, true);
+						  $old = umask(0);
+						  $file = rtrim($targetPath . $currentFile, '/');
+                    @mkdir($file, 0777);
+					     umask($old);
+						  $file_msg = "Folder $file ";
+						  ssm_log($file." ssssSSM\n");
                 } elseif (($header['type']=='' || $header['type']=='0' || $header['type']==chr(0))) {
-                    file_put_contents($targetPath . $currentFile, $header['data']);
+						  $file = $targetPath . $currentFile;
+                    file_put_contents($file, $header['data']);
+						  $file_msg = "File $file ";
                 }
+					 $file_msg .= (file_exists($file) ? "exists" : "does not exist");
+					 ssm_log($file_msg."\n");
             }
         }
         fclose($pointer);
@@ -559,8 +615,9 @@ class Magento_Downloader_Worker
             }
             @ftp_pasv($connId, true);
             $tmpDir = realpath(dirname($this->getDestinationFilePath())) . DIRECTORY_SEPARATOR . 'magento';
+				ssm_log("$tmpDir SSMxxx\n");
             $this->_ftpCopyRecursive($connId, $tmpDir, $ftpPath);
-            ftp_close($connId);
+            ftp_close($connId); 
             $this->rmdirRecursive($tmpDir);
         } else {
             throw new Exception("Could not connect to $ftpHost");
@@ -1365,12 +1422,28 @@ class Magento_Downloader_Action
     /**
      * Init class
      */
-    public function __construct()
+    public function __construct($ini_array)
     {
         if (!isset($_SESSION)) {
             session_name('magento_downloader_session');
             session_start();
+            
+            $_SESSION['download_protocol']= $ini_array["download_protocol"];
+            $_SESSION['downloaded']       = $ini_array["false"];
+      
+            $_SESSION['host']             = $ini_array["database_connection"]["host"];
+            $_SESSION['username']         = $ini_array["database_connection"]["username"];
+            $_SESSION['password']         = $ini_array["database_connection"]["password"];
+            
+            $_SESSION['deployment']['ftp_host']       = $ini_array['deployment']["ftp_host"];
+            $_SESSION['deployment']['ftp_username']   = $ini_array['deployment']["ftp_username"];
+            $_SESSION['deployment']['ftp_password']   = $ini_array['deployment']["ftp_password"];
+            $_SESSION['deployment']['ftp_path']       = $ini_array['deployment']["ftp_path"];            
+            $_SESSION['deployment']['type']           = $ini_array['deployment']["type"];
+           
+
         }
+        
         $this->_helper    = new Magento_Downloader_Helper();
         $this->_worker    = new Magento_Downloader_Worker();
         $this->_validator = new Magento_Downloader_Validator();
@@ -1422,6 +1495,13 @@ class Magento_Downloader_Action
         $this->_helper->printHtmlFormFoot();
         $this->_helper->printHtmlFooter();
         $this->_helper->printHtmlBodyEnd();
+        
+        
+        //$ini_array                          = parse_ini_file("downloader.ini",true);
+        //$this->_session['host']             = $ini_array["database_connection"]["host"];
+        //$this->_session['username']         = $ini_array["database_connection"]["username"];
+        //$this->_session['password']         = $ini_array["database_connection"]["password"];
+        
         return $this;
     }
 
@@ -1570,6 +1650,7 @@ class Magento_Downloader_Action
             'downloader' => 'Continue'
         );
 
+
         $this->_helper->printHtmlHeader();
         $this->_helper->printHtmlBodyTop('download()');
         $this->_helper->printHtmlFormHead();
@@ -1590,6 +1671,7 @@ class Magento_Downloader_Action
      */
     public function connectAction()
     {
+    	  ssm_log("CONNECT SSM\n");
         $msg = '';
         if (!isset($this->_session['downloaded']) || !$this->_session['downloaded']) {
             try {
@@ -1610,6 +1692,9 @@ class Magento_Downloader_Action
             } catch (Exception $e) {
                 $msg = addslashes($e->getMessage());
                 $msg = $e->getMessage();
+                $line= $e-> getLine();
+                ssm_log($line . " " .$msg);
+
                 echo <<<SCRIPT
                 document.getElementById('button-downloader').disabled = true;
                 document.getElementById('button-downloader').setAttribute('class', 'button_disabled');
@@ -1668,11 +1753,18 @@ SCRIPT;
                     $this->welcomeAction();
             }
         } else {
+            file_put_contents("log.txt", '');
             $this->welcomeAction();
         }
         return $this;
     }
 }
 
-$downloader = new Magento_Downloader_Action();
+
+
+
+$ini_array  = parse_ini_file("downloader.ini",true);
+$tmpdir                                   = $ini_array['deployment']["TMPDIR"];
+putenv("TMPDIR=".$tmpdir);
+$downloader = new Magento_Downloader_Action($ini_array);
 $downloader->run();
